@@ -1,0 +1,505 @@
+---
+title: "20180601_Chemotaxis"
+author: "Tim C."
+date: "6/1/2018"
+output:
+  html_document:
+    toc: true
+    toc_float:
+      collapsed: false
+      smooth_scroll: false
+---
+
+### Notes
+Chemotaxis data are from three blocks. Each block contained 11 strains, three replicate plates per strain. Worms were transfered for 3 generations prior to bleach synchronization and grown to L4 stage prior to experiment. Worms were then washed off four 60 mm plates (~1,500 worms/plate) with M9 and sorted to 60 mm chemotaxis plates (50 worms in 50 ul). Test and control spots contained 2.5 ul and were loaded using the version2 plate template from Zeke. Excess liquid was either removed with kimwipe or left to dry on its own for ~10-15 min prior to chemotaxis. Worms were left to chemotax for 1 h at 20 C then plates were transfered to 4C. 24 -72 h later worms were imaged by Chido and manually counted using imageJ cell counter plugin. Cropped images were also used to count nemtodes with automated Python package `chemotaxis-cli`. 
+
+```{r, echo=F, warning = F, message=F}
+library(tidyverse)
+library(scales)
+try(setwd(dirname(rstudioapi::getActiveDocumentContext()$path)))
+```
+
+### Read in data
+```{r, echo = FALSE, warning=FALSE}
+df <- as.data.frame(read.csv(file = "Results_Block_3_4_6b_8.csv", header = T))
+
+
+df <- df%>%
+  dplyr::select(-X, -X.1, -X.2) %>%
+  dplyr::filter(CI != "#DIV/0!") %>%
+  dplyr::filter(strain != "ED3017") %>%
+  dplyr::filter(!is.na(Assay),
+                Assay != "20180307") %>% #filter block 20180307
+  dplyr::mutate(CI = as.numeric(as.character(CI)),
+                drug = ifelse(drug == "isa", "isoamly alcohol", "1-octanol"))
+
+glimpse(df)
+
+
+# define heritability test
+H2.test <- function(data){
+  
+  pheno <- as.data.frame(dplyr::select(data, phenotype))[,1]
+  strain <- as.factor(data$strain)
+  
+  reffMod <- lme4::lmer(pheno ~ 1 + (1|strain))
+  
+  Variances <- as.data.frame(lme4::VarCorr(reffMod, comp = "Variance"))
+  
+  Vg <- Variances$vcov[1]
+  Ve <- Variances$vcov[2]
+  H2 <- Vg/(Vg+Ve)
+  
+  return(H2)
+}
+
+
+
+```
+
+### CI Plots
+```{r, echo = FALSE, warning=FALSE}
+# Plotting CI manual counts
+
+fig1 <- ggplot(df %>% dplyr::filter(counter == "manual")) +
+  aes(x = strain, y = CI) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(aes(color = as.factor(Assay)), width = .25, alpha = 0.75, size = 2)+
+  ylim(-1,1) +
+  facet_grid(~drug) +
+  theme_classic() +
+   theme(title = element_text(size = 16, color = "black", face = "bold"),
+        axis.title = element_text(size = 16, color = "black", face = "bold"),
+        axis.text = element_text(size = 16, color = "black"),
+        legend.text = element_text(size = 16, color = "black"),
+        strip.text.x = element_text(size = 16, colour = "black")) + 
+  labs(title = "FIG 1: Manual counting", color = "Block", x = "", y = "Chemotactic Index (ci)") +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1)) +
+  theme(legend.position="right")
+fig1
+
+ggsave('fig1_manual_CI.pdf', width = 12, height = 8)
+ggsave('fig1_manual_CI.png', width = 12, height = 8)
+
+# Plotting automated counts
+
+fig2 <- ggplot(df %>% dplyr::filter(counter == "auto")) +
+  aes(x = strain, y = CI) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(aes(color = as.factor(Assay)), width = .25, alpha = 0.75, size = 2)+
+  facet_grid(~drug) +
+  ylim(-1,1) +
+  theme_classic() +
+   theme(title = element_text(size = 16, color = "black", face = "bold"),
+        axis.title = element_text(size = 16, color = "black", face = "bold"),
+        axis.text = element_text(size = 16, color = "black"),
+        legend.text = element_text(size = 16, color = "black"),
+        strip.text.x = element_text(size = 16, colour = "black")) + 
+  labs(title = "FIG 2: Automated counting", color = "Block", x = "", y = "Chemotactic Index (ci)") +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1)) +
+  theme(legend.position="right")
+fig2
+
+ggsave('fig2_auto_CI.pdf', width = 12, height = 8)
+ggsave('fig2_auto_CI.png', width = 12, height = 8)
+
+# correlation between manual and auto
+lm_eqn <- function(df){
+    m <- lm(auto_ci ~ man_ci, df);
+    eq <- substitute(italic(y) == a + b %.% italic(x)*","~~italic(r)^2~"="~r2, 
+         list(a = format(coef(m)[1], digits = 2), 
+              b = format(coef(m)[2], digits = 2), 
+             r2 = format(summary(m)$r.squared, digits = 3)))
+    as.character(as.expression(eq));                 
+}
+```
+
+### Method correlation
+```{r, echo=FALSE, warning=FALSE}
+# Fitting correlation with ggplot to two compopunds manual counts vs. automated counts
+df_corr <- df %>%
+  dplyr::select(-Drug_Count, -Control_Count, -count) %>%
+  tidyr::spread(counter, CI) %>% 
+  dplyr::rename(man_ci = manual, auto_ci = auto)
+
+# Add two linear regression plots red = #F8766D, blue = #00BFC4
+# show_col(hue_pal()(2))
+
+fig3 <- ggplot() +
+  geom_point(data = df_corr %>% dplyr::filter( drug == "1-octanol"), aes(x = man_ci, y = auto_ci, color = as.factor(drug))) +
+  geom_smooth(data = df_corr %>% dplyr::filter(drug == "1-octanol"), aes(x = man_ci, y = auto_ci), method=lm, color = "#F8766D", size = 0.5) +
+  geom_text(data = df_corr %>% dplyr::filter( drug == "1-octanol"), x = -.45, y = 0.4, label = lm_eqn(df_corr %>% dplyr::filter(drug == "1-octanol")), parse = TRUE, check_overlap = TRUE, color = "#F8766D", size = 5) +
+  geom_point(data = df_corr %>% dplyr::filter( drug == "isoamly alcohol"), aes(x = man_ci, y = auto_ci, color = as.factor(drug))) +
+  geom_smooth(data = df_corr %>% dplyr::filter(drug == "isoamly alcohol"), aes(x = man_ci, y = auto_ci), method=lm, color = "#00BFC4", size = 0.5) +
+  geom_text(data = df_corr %>% dplyr::filter( drug != "1-octanol"), x = .45, y = -0.4, label = lm_eqn(df_corr %>% dplyr::filter(drug != "1-octanol")), parse = TRUE, check_overlap = TRUE, color = "#00BFC4", size = 5) +
+  xlim(-1,1) +
+  ylim(-1,1) +
+   theme_light() +
+   theme(title = element_text(size = 16, color = "black", face = "bold"),
+        axis.title = element_text(size = 16, color = "black", face = "bold"),
+        axis.text = element_text(size = 16, color = "black"),
+        legend.text = element_text(size = 16, color = "black")) + 
+  labs(title = "FIG 3: Assay agreement", color = "drug", x = "Manual (CI)", y = "Automated (CI)") +
+  theme(legend.position="right")
+fig3
+
+ggsave('fig3_assay_agreement_CI.pdf', width = 12, height = 8)
+ggsave('fig3_assay_agreement_CI.png', width = 12, height = 8)
+
+
+```
+
+### Heritability Calculations
+```{r, echo=FALSE, warning=FALSE}
+# Calculate heritability including three replicates per block
+h2_df_full<- df %>%
+  dplyr::rename(trait = drug, phenotype = CI) %>%
+  dplyr::select(-Drug_Count, -Control_Count, -Image_ID) %>% 
+  dplyr::mutate(strain = as.character(strain)) %>%
+  dplyr::arrange(counter, trait, strain)
+
+# export heritability dataframe
+rio::export(h2_df_full, "chemotaxis_heritability_dataframe.csv")
+
+h2_df<- h2_df_full %>%
+  dplyr::group_by(counter, trait) %>%
+  dplyr::do(broom::tidy(H2.test(.))) %>%
+  dplyr::rename(H2 = x) %>%
+  dplyr::ungroup()
+
+fig4 <- ggplot() +
+  geom_point(data = h2_df, aes(x = trait, y = H2, color = counter)) +
+  #geom_point(data = h2_df %>% dplyr::filter(counter == "auto"), aes(x = trait, y = H2)) +
+  #geom_point(data = h2_df %>% dplyr::filter(counter == "manual"), aes(x = trait, y = H2)) +
+  ylim(0,1) +
+  geom_line(aes(x = c(0,3), y = 0.2), linetype="dashed", color="black") +
+  theme_light() +
+   theme(title = element_text(size = 16, color = "black", face = "bold"),
+        axis.title = element_text(size = 16, color = "black", face = "bold"),
+        axis.text = element_text(size = 16, color = "black"),
+        legend.text = element_text(size = 16, color = "black")) + 
+  labs(title = "FIG 4: Heritability for three replicates per block", color = "Method", x = "", y = "H2") +
+  theme(legend.position="right")
+fig4
+
+ggsave('fig4_h2_reps.pdf', width = 12, height = 8)
+ggsave('fig4_h2_reps.png', width = 12, height = 8)
+
+# Calculate heritability with replicates averaged per block
+h2_df_2<- df %>%
+  dplyr::group_by(Assay, drug, strain, counter) %>%
+  dplyr::mutate(mean_CI = mean(CI)) %>%
+  dplyr::distinct(Assay, counter, strain, drug, .keep_all = T) %>%
+  dplyr::rename(trait = drug, phenotype = mean_CI) %>%
+  dplyr::select(-Drug_Count, -Control_Count, -Image_ID, -CI) %>%
+  dplyr::ungroup() %>%
+  dplyr::mutate(strain = as.character(strain)) %>%
+  dplyr::group_by(counter, trait) %>%
+  dplyr::do(broom::tidy(H2.test(.))) %>%
+  dplyr::rename(H2 = x) %>%
+  dplyr::ungroup()
+
+fig5 <- ggplot() +
+  geom_point(data = h2_df_2, aes(x = trait, y = H2, color = counter), size = 3) +
+  #geom_point(data = h2_df %>% dplyr::filter(counter == "auto"), aes(x = trait, y = H2)) +
+  #geom_point(data = h2_df %>% dplyr::filter(counter == "manual"), aes(x = trait, y = H2)) +
+  ylim(0,1) +
+  geom_line(aes(x = c(0,3), y = 0.2), linetype="dashed", color="black") +
+  theme_light() +
+   theme(title = element_text(size = 16, color = "black", face = "bold"),
+        axis.title = element_text(size = 16, color = "black", face = "bold"),
+        axis.text = element_text(size = 16, color = "black"),
+        legend.text = element_text(size = 16, color = "black")) + 
+  labs(title = "FIG 5: Heritability for block means", color = "Method", x = "", y = "H2") +
+  theme(legend.position="right")
+fig5
+
+ggsave('fig5_h2_means.pdf', width = 12, height = 8)
+ggsave('fig5_h2_means.png', width = 12, height = 8)
+
+```
+
+###Spearman's rank order testing for blocks
+```{r, echo=FALSE, warnings=FALSE}
+df_rank <- df %>%
+  dplyr::group_by(Assay, drug, strain, counter) %>%
+  dplyr::mutate(mean_CI = mean(CI)) %>%
+  dplyr::distinct(Assay, counter, strain, drug, .keep_all = T) %>%
+  dplyr::group_by(Assay, drug, counter) %>%
+  dplyr::mutate(r_CI = rank(CI),
+                scaledr_CI = scales::rescale(r_CI, to = range(CI))) %>%
+  dplyr::select(Assay, counter, strain, drug, CI) %>%
+  tidyr::spread(Assay, CI) %>%
+  dplyr::rename("block_1" = `20180321`, "block_2" = `20180420`, "block_3" = `20180508`) %>%
+  dplyr::group_by(counter, drug) %>%
+  dplyr::mutate(b1_V_b2 = cor(block_1, block_2, method = "spearman"),
+                b1_V_b3 = cor(block_1, block_3, method = "spearman"),
+                b2_V_b3 = cor(block_2, block_3, method = "spearman")) %>%
+  dplyr::distinct(counter, drug, .keep_all = T) %>%
+  tidyr::gather(cor, value, b1_V_b2, b1_V_b3, b2_V_b3) %>%
+  dplyr::select(-strain, -block_1, -block_2, -block_3)
+
+cor_plot <- ggplot(df_rank) +
+  aes(x = cor, y = value, color = counter) +
+  geom_point(size = 3) +
+  facet_wrap(~drug)+
+  theme_light() +
+   theme(title = element_text(size = 16, color = "black", face = "bold"),
+        axis.title = element_text(size = 16, color = "black", face = "bold"),
+        axis.text = element_text(size = 16, color = "black"),
+        legend.text = element_text(size = 16, color = "black"),
+        strip.text.x = element_text(size = 16, colour = "black"),
+        axis.text.x = element_text(angle = 45, hjust = 1)) + 
+  labs(title = "FIG 4: Spearman's rank correlation", x = "", y = "Spearman's rho", color = "Method") +
+  theme(legend.position="right")
+cor_plot
+
+ggsave('fig6_rank_order.pdf', width = 12, height = 8)
+ggsave('fig6_rank_order.png', width = 12, height = 8)
+```
+ 
+### Plots of rank order
+```{r, echo=FALSE, warning=FALSE}
+# Function for flagging outliers (used 2.5 * IQR)
+flag_outliers <- function(x, na.rm = TRUE, ...) {
+  qnt <- quantile(x, probs=c(.25, .75), na.rm = na.rm, ...)
+  H <- 2.5 * IQR(x, na.rm = na.rm)
+  y <- x
+  y[x < (qnt[1] - H)] <- "TRUE"
+  y[x > (qnt[2] + H)] <- "TRUE"
+  y[x > (qnt[1] - H) & x < (qnt[2] + H)] <- "FALSE"
+  y
+  }
+
+#remove flagged outliers then take mean of replicates within blocks
+df_proc_ranks <- df %>%
+  dplyr::group_by(counter, strain, drug) %>%
+  dplyr::mutate(CI_outlier = flag_outliers(CI)) %>%
+  dplyr::filter(CI_outlier != "TRUE") %>%
+  dplyr::group_by(Assay, drug, strain, counter) %>%
+  dplyr::mutate(mean_CI = mean(CI))
+  
+#plot CI by block and method
+df_proc_ranks_plot_a <- 
+  ggplot(df_proc_ranks %>% dplyr::filter(Assay == "20180321", counter == "auto", drug == "1-octanol")) +
+  #geom_boxplot(aes(x = forcats::fct_reorder(strain, mean_CI), y = CI)) +
+  geom_point(aes(x = forcats::fct_reorder(strain, mean_CI), y = CI), size = 3, alpha = .5) +
+  theme_light() +
+  ylim(-1,1) +
+  theme(title = element_text(size = 16, color = "black", face = "bold"),
+        axis.title = element_text(size = 16, color = "black", face = "bold"),
+        axis.text = element_text(size = 16, color = "black"),
+        legend.text = element_text(size = 16, color = "black"),
+        strip.text.x = element_text(size = 16, colour = "black"),
+        axis.text.x = element_text(angle = 45, hjust = 1)) + 
+  labs(title = "block 1: 1-octanol", x = "", y = "CI", color = "") +
+  theme(legend.position="none")
+
+df_proc_ranks_plot_a
+          
+df_proc_ranks_plot_b<- 
+  ggplot(df_proc_ranks %>% dplyr::filter(Assay == "20180321", counter == "auto", drug == "isoamly alcohol")) +
+  #geom_boxplot(aes(x = forcats::fct_reorder(strain, mean_CI), y = CI)) +
+  geom_point(aes(x = forcats::fct_reorder(strain, mean_CI), y = CI), size = 3, alpha = .5) +
+  theme_light() +
+  ylim(-1,1) +
+  theme(title = element_text(size = 16, color = "black", face = "bold"),
+        axis.title = element_text(size = 16, color = "black", face = "bold"),
+        axis.text = element_text(size = 16, color = "black"),
+        legend.text = element_text(size = 16, color = "black"),
+        strip.text.x = element_text(size = 16, colour = "black"),
+        axis.text.x = element_text(angle = 45, hjust = 1)) + 
+  labs(title = "block 1: isoamyl alcohol", x = "", y = "CI", color = "") +
+  theme(legend.position="none")
+df_proc_ranks_plot_b
+
+df_proc_ranks_plot_c<- 
+  ggplot(df_proc_ranks %>% dplyr::filter(Assay == "20180420", counter == "auto", drug == "1-octanol")) +
+  #geom_boxplot(aes(x = forcats::fct_reorder(strain, mean_CI), y = CI)) +
+  geom_point(aes(x = forcats::fct_reorder(strain, mean_CI), y = CI), size = 3, alpha = .5) +
+  theme_light() +
+  ylim(-1,1) +
+  theme(title = element_text(size = 16, color = "black", face = "bold"),
+        axis.title = element_text(size = 16, color = "black", face = "bold"),
+        axis.text = element_text(size = 16, color = "black"),
+        legend.text = element_text(size = 16, color = "black"),
+        strip.text.x = element_text(size = 16, colour = "black"),
+        axis.text.x = element_text(angle = 45, hjust = 1)) + 
+  labs(title = "block 2: 1-octanol", x = "", y = "CI", color = "") +
+  theme(legend.position="none")
+df_proc_ranks_plot_c
+
+df_proc_ranks_plot_d<- 
+  ggplot(df_proc_ranks %>% dplyr::filter(Assay == "20180420", counter == "auto", drug == "isoamly alcohol")) +
+  #geom_boxplot(aes(x = forcats::fct_reorder(strain, mean_CI), y = CI)) +
+  geom_point(aes(x = forcats::fct_reorder(strain, mean_CI), y = CI), size = 3, alpha = .5) +
+  theme_light() +
+  ylim(-1,1) +
+  theme(title = element_text(size = 16, color = "black", face = "bold"),
+        axis.title = element_text(size = 16, color = "black", face = "bold"),
+        axis.text = element_text(size = 16, color = "black"),
+        legend.text = element_text(size = 16, color = "black"),
+        strip.text.x = element_text(size = 16, colour = "black"),
+        axis.text.x = element_text(angle = 45, hjust = 1)) + 
+  labs(title = "block 2: isoamyl alcohol", x = "", y = "CI", color = "") +
+  theme(legend.position="none")
+df_proc_ranks_plot_d
+
+df_proc_ranks_plot_e<- 
+  ggplot(df_proc_ranks %>% dplyr::filter(Assay == "20180508", counter == "auto", drug == "1-octanol")) +
+  #geom_boxplot(aes(x = forcats::fct_reorder(strain, mean_CI), y = CI)) +
+  geom_point(aes(x = forcats::fct_reorder(strain, mean_CI), y = CI), size = 3, alpha = .5) +
+  theme_light() +
+  ylim(-1,1) +
+  theme(title = element_text(size = 16, color = "black", face = "bold"),
+        axis.title = element_text(size = 16, color = "black", face = "bold"),
+        axis.text = element_text(size = 16, color = "black"),
+        legend.text = element_text(size = 16, color = "black"),
+        strip.text.x = element_text(size = 16, colour = "black"),
+        axis.text.x = element_text(angle = 45, hjust = 1)) + 
+  labs(title = "block 3: 1-octanol", x = "", y = "CI", color = "") +
+  theme(legend.position="none")
+df_proc_ranks_plot_e
+
+df_proc_ranks_plot_f<- 
+  ggplot(df_proc_ranks %>% dplyr::filter(Assay == "20180508", counter == "auto", drug == "isoamly alcohol")) +
+  #geom_boxplot(aes(x = forcats::fct_reorder(strain, mean_CI), y = CI)) +
+  geom_point(aes(x = forcats::fct_reorder(strain, mean_CI), y = CI), size = 3, alpha = .5) +
+  theme_light() +
+  ylim(-1,1) +
+  theme(title = element_text(size = 16, color = "black", face = "bold"),
+        axis.title = element_text(size = 16, color = "black", face = "bold"),
+        axis.text = element_text(size = 16, color = "black"),
+        legend.text = element_text(size = 16, color = "black"),
+        strip.text.x = element_text(size = 16, colour = "black"),
+        axis.text.x = element_text(angle = 45, hjust = 1)) + 
+  labs(title = "block 3: isoamyl alcohol", x = "", y = "CI", color = "") +
+  theme(legend.position="none")
+df_proc_ranks_plot_f
+
+test <- cowplot::plot_grid(df_proc_ranks_plot_a, df_proc_ranks_plot_b, df_proc_ranks_plot_c, df_proc_ranks_plot_d, df_proc_ranks_plot_e, df_proc_ranks_plot_f, ncol = 2, nrow = 3, align = "vh")
+test
+
+ggsave('fig7_rank_auto.pdf', width = 24, height = 16)
+ggsave('fig7_rank_auto.png', width = 24, height = 16)
+
+# Plot manual count ranks too
+
+df_proc_ranks_plot_a <- 
+  ggplot(df_proc_ranks %>% dplyr::filter(Assay == "20180321", counter == "manual", drug == "1-octanol")) +
+  #geom_boxplot(aes(x = forcats::fct_reorder(strain, mean_CI), y = CI)) +
+  geom_point(aes(x = forcats::fct_reorder(strain, mean_CI), y = CI), size = 3, alpha = .5) +
+  theme_light() +
+  ylim(-1,1) +
+  theme(title = element_text(size = 16, color = "black", face = "bold"),
+        axis.title = element_text(size = 16, color = "black", face = "bold"),
+        axis.text = element_text(size = 16, color = "black"),
+        legend.text = element_text(size = 16, color = "black"),
+        strip.text.x = element_text(size = 16, colour = "black"),
+        axis.text.x = element_text(angle = 45, hjust = 1)) + 
+  labs(title = "block 1: 1-octanol", x = "", y = "CI", color = "") +
+  theme(legend.position="none")
+
+df_proc_ranks_plot_a
+          
+df_proc_ranks_plot_b<- 
+  ggplot(df_proc_ranks %>% dplyr::filter(Assay == "20180321", counter == "manual", drug == "isoamly alcohol")) +
+  #geom_boxplot(aes(x = forcats::fct_reorder(strain, mean_CI), y = CI)) +
+  geom_point(aes(x = forcats::fct_reorder(strain, mean_CI), y = CI), size = 3, alpha = .5) +
+  theme_light() +
+  ylim(-1,1) +
+  theme(title = element_text(size = 16, color = "black", face = "bold"),
+        axis.title = element_text(size = 16, color = "black", face = "bold"),
+        axis.text = element_text(size = 16, color = "black"),
+        legend.text = element_text(size = 16, color = "black"),
+        strip.text.x = element_text(size = 16, colour = "black"),
+        axis.text.x = element_text(angle = 45, hjust = 1)) + 
+  labs(title = "block 1: isoamyl alcohol", x = "", y = "CI", color = "") +
+  theme(legend.position="none")
+df_proc_ranks_plot_b
+
+df_proc_ranks_plot_c<- 
+  ggplot(df_proc_ranks %>% dplyr::filter(Assay == "20180420", counter == "manual", drug == "1-octanol")) +
+  #geom_boxplot(aes(x = forcats::fct_reorder(strain, mean_CI), y = CI)) +
+  geom_point(aes(x = forcats::fct_reorder(strain, mean_CI), y = CI), size = 3, alpha = .5) +
+  theme_light() +
+  ylim(-1,1) +
+  theme(title = element_text(size = 16, color = "black", face = "bold"),
+        axis.title = element_text(size = 16, color = "black", face = "bold"),
+        axis.text = element_text(size = 16, color = "black"),
+        legend.text = element_text(size = 16, color = "black"),
+        strip.text.x = element_text(size = 16, colour = "black"),
+        axis.text.x = element_text(angle = 45, hjust = 1)) + 
+  labs(title = "block 2: 1-octanol", x = "", y = "CI", color = "") +
+  theme(legend.position="none")
+df_proc_ranks_plot_c
+
+df_proc_ranks_plot_d<- 
+  ggplot(df_proc_ranks %>% dplyr::filter(Assay == "20180420", counter == "manual", drug == "isoamly alcohol")) +
+  #geom_boxplot(aes(x = forcats::fct_reorder(strain, mean_CI), y = CI)) +
+  geom_point(aes(x = forcats::fct_reorder(strain, mean_CI), y = CI), size = 3, alpha = .5) +
+  theme_light() +
+  ylim(-1,1) +
+  theme(title = element_text(size = 16, color = "black", face = "bold"),
+        axis.title = element_text(size = 16, color = "black", face = "bold"),
+        axis.text = element_text(size = 16, color = "black"),
+        legend.text = element_text(size = 16, color = "black"),
+        strip.text.x = element_text(size = 16, colour = "black"),
+        axis.text.x = element_text(angle = 45, hjust = 1)) + 
+  labs(title = "block 2: isoamyl alcohol", x = "", y = "CI", color = "") +
+  theme(legend.position="none")
+df_proc_ranks_plot_d
+
+df_proc_ranks_plot_e<- 
+  ggplot(df_proc_ranks %>% dplyr::filter(Assay == "20180508", counter == "manual", drug == "1-octanol")) +
+  #geom_boxplot(aes(x = forcats::fct_reorder(strain, mean_CI), y = CI)) +
+  geom_point(aes(x = forcats::fct_reorder(strain, mean_CI), y = CI), size = 3, alpha = .5) +
+  theme_light() +
+  ylim(-1,1) +
+  theme(title = element_text(size = 16, color = "black", face = "bold"),
+        axis.title = element_text(size = 16, color = "black", face = "bold"),
+        axis.text = element_text(size = 16, color = "black"),
+        legend.text = element_text(size = 16, color = "black"),
+        strip.text.x = element_text(size = 16, colour = "black"),
+        axis.text.x = element_text(angle = 45, hjust = 1)) + 
+  labs(title = "block 3: 1-octanol", x = "", y = "CI", color = "") +
+  theme(legend.position="none")
+df_proc_ranks_plot_e
+
+df_proc_ranks_plot_f<- 
+  ggplot(df_proc_ranks %>% dplyr::filter(Assay == "20180508", counter == "manual", drug == "isoamly alcohol")) +
+  #geom_boxplot(aes(x = forcats::fct_reorder(strain, mean_CI), y = CI)) +
+  geom_point(aes(x = forcats::fct_reorder(strain, mean_CI), y = CI), size = 3, alpha = .5) +
+  theme_light() +
+  ylim(-1,1) +
+  theme(title = element_text(size = 16, color = "black", face = "bold"),
+        axis.title = element_text(size = 16, color = "black", face = "bold"),
+        axis.text = element_text(size = 16, color = "black"),
+        legend.text = element_text(size = 16, color = "black"),
+        strip.text.x = element_text(size = 16, colour = "black"),
+        axis.text.x = element_text(angle = 45, hjust = 1)) + 
+  labs(title = "block 3: isoamyl alcohol", x = "", y = "CI", color = "") +
+  theme(legend.position="none")
+df_proc_ranks_plot_f
+
+test_manual <- cowplot::plot_grid(df_proc_ranks_plot_a, df_proc_ranks_plot_b, df_proc_ranks_plot_c, df_proc_ranks_plot_d, df_proc_ranks_plot_e, df_proc_ranks_plot_f, ncol = 2, nrow = 3, align = "vh")
+
+ggsave('fig7_rank_manual.pdf', width = 24, height = 16)
+ggsave('fig7_rank_manual.png', width = 24, height = 16)
+
+# calculate spearman's rho for outlier filtered data
+df_proc_rank_cor <- df_proc_ranks %>%
+  dplyr::select(Assay, counter, strain, drug, CI) %>%
+  tidyr::spread(Assay, CI) %>%
+  dplyr::rename("block_1" = `20180321`, "block_2" = `20180420`, "block_3" = `20180508`) %>%
+  dplyr::group_by(counter, drug) %>%
+  dplyr::mutate(b1_V_b2 = cor(block_1, block_2, method = "spearman"),
+                b1_V_b3 = cor(block_1, block_3, method = "spearman"),
+                b2_V_b3 = cor(block_2, block_3, method = "spearman")) %>%
+  dplyr::distinct(counter, drug, .keep_all = T) %>%
+  tidyr::gather(cor, value, b1_V_b2, b1_V_b3, b2_V_b3) %>%
+  dplyr::select(-strain, -block_1, -block_2, -block_3)
+
+#ggsave('fig.pdf', width = 12, height = 8)
+#ggsave('fig.png', width = 12, height = 8)
+```
