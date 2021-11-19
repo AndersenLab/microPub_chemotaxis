@@ -1,12 +1,25 @@
 1. create the enviornmet with conda
 
 ```
+cd ~/repos/chemotaxis-cli
+
+conda create --name chemotaxis python=2.7
 
 ```
 
 2. acitvate the enviroment
 
+```
+conda activate chemotaxis
+```
+
 3. install pip - 'conda install pip'
+
+```
+
+
+```
+
 
 4. check that 'which pip' references pip in your environment
 
