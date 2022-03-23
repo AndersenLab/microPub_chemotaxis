@@ -21,7 +21,7 @@ try(setwd(dirname(rstudioapi::getActiveDocumentContext()$path)))
 
 ### Read in data
 ```{r, echo = FALSE, warning=FALSE}
-df <- as.data.frame(read.csv(file = "Results_Block_3_4_6b_8.csv", header = T))
+df <- as.data.frame(read.csv(file = glue::glue("{getwd()}/../data/Results_Block_3_4_6b_8.csv"), header = T))
 
 
 df <- df%>%
@@ -159,7 +159,7 @@ h2_df_full<- df %>%
   dplyr::arrange(counter, trait, strain)
 
 # export heritability dataframe
-rio::export(h2_df_full, "chemotaxis_heritability_dataframe.csv")
+#rio::export(h2_df_full, "chemotaxis_heritability_dataframe.csv")
 
 h2_df<- h2_df_full %>%
   dplyr::group_by(counter, trait) %>%
@@ -182,8 +182,8 @@ fig4 <- ggplot() +
   theme(legend.position="right")
 fig4
 
-ggsave('fig4_h2_reps.pdf', width = 12, height = 8)
-ggsave('fig4_h2_reps.png', width = 12, height = 8)
+#ggsave('fig4_h2_reps.pdf', width = 12, height = 8)
+#ggsave('fig4_h2_reps.png', width = 12, height = 8)
 
 # Calculate heritability with replicates averaged per block
 h2_df_2<- df %>%
@@ -214,8 +214,8 @@ fig5 <- ggplot() +
   theme(legend.position="right")
 fig5
 
-ggsave('fig5_h2_means.pdf', width = 12, height = 8)
-ggsave('fig5_h2_means.png', width = 12, height = 8)
+#ggsave('fig5_h2_means.pdf', width = 12, height = 8)
+#ggsave('fig5_h2_means.png', width = 12, height = 8)
 
 ```
 
@@ -254,8 +254,8 @@ cor_plot <- ggplot(df_rank) +
   theme(legend.position="right")
 cor_plot
 
-ggsave('fig6_rank_order.pdf', width = 12, height = 8)
-ggsave('fig6_rank_order.png', width = 12, height = 8)
+#ggsave('fig6_rank_order.pdf', width = 12, height = 8)
+#ggsave('fig6_rank_order.png', width = 12, height = 8)
 ```
  
 ### Plots of rank order
@@ -377,11 +377,11 @@ df_proc_ranks_plot_f<-
   theme(legend.position="none")
 df_proc_ranks_plot_f
 
-test <- cowplot::plot_grid(df_proc_ranks_plot_a, df_proc_ranks_plot_b, df_proc_ranks_plot_c, df_proc_ranks_plot_d, df_proc_ranks_plot_e, df_proc_ranks_plot_f, ncol = 2, nrow = 3, align = "vh")
-test
+#test <- cowplot::plot_grid(df_proc_ranks_plot_a, df_proc_ranks_plot_b, df_proc_ranks_plot_c, df_proc_ranks_plot_d, df_proc_ranks_plot_e, df_proc_ranks_plot_f, ncol = 2, nrow = 3, align = "vh")
+#test
 
-ggsave('fig7_rank_auto.pdf', width = 24, height = 16)
-ggsave('fig7_rank_auto.png', width = 24, height = 16)
+#ggsave('fig7_rank_auto.pdf', width = 24, height = 16)
+#ggsave('fig7_rank_auto.png', width = 24, height = 16)
 
 # Plot manual count ranks too
 
@@ -484,8 +484,8 @@ df_proc_ranks_plot_f
 
 test_manual <- cowplot::plot_grid(df_proc_ranks_plot_a, df_proc_ranks_plot_b, df_proc_ranks_plot_c, df_proc_ranks_plot_d, df_proc_ranks_plot_e, df_proc_ranks_plot_f, ncol = 2, nrow = 3, align = "vh")
 
-ggsave('fig7_rank_manual.pdf', width = 24, height = 16)
-ggsave('fig7_rank_manual.png', width = 24, height = 16)
+#ggsave('fig7_rank_manual.pdf', width = 24, height = 16)
+#ggsave('fig7_rank_manual.png', width = 24, height = 16)
 
 # calculate spearman's rho for outlier filtered data
 df_proc_rank_cor <- df_proc_ranks %>%
