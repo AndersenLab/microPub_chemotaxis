@@ -15,4 +15,25 @@ df <- as.data.frame(read.csv(file = glue::glue("data/Results_Block_3_4_6b_8.csv"
 
 # read in test data generated with __init__.py and command.py scripts in AndersenLab/chemotaxis-cli github repo
 # Data made with repo commit = ae48a5c from Mar 13, 2017
-test <- 
+r <- list("data/20180321_crop_results.txt", "data/20180420_crop_results.txt", "data/20180508_crop_results.txt")
+df_new <-purrr::map_dfr(r, function(x) {
+  data.table::fread(file = x) %>%
+    dplyr::mutate(Assay = as.integer(stringr::str_extract(x, pattern = "([0-9]+)"))) %>%
+    dplyr::rename(Image_ID = fname)
+})
+
+df_comp<- df_new %>%
+  dplyr::select(Assay, Image_ID, ci) %>%
+  dplyr::left_join(df) %>%
+  dplyr::mutate(ci_diff = ifelse(counter == "auto", CI-ci, NA_real_))
+
+diff_dist <- df_comp %>%
+  dplyr::filter(counter == "auto") %>%
+  ggplot2::ggplot() +
+  ggplot2::aes(x = ci_diff) +
+  ggplot2::geom_histogram(bins = 60) +
+  labs(x = "CI diff (work - repo:ae48a5c)") +
+  ggplot2::xlim(-1, 1)
+diff_dist
+
+# join new and old data
