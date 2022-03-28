@@ -1,5 +1,10 @@
 library(tidyverse)
 
+# setup python env for reticulate
+#reticulate::use_condaenv("~/conda_envs/chemotaxis_py2.7.12", required = TRUE)
+reticulate::use_python("~/conda_envs/chemotaxis_py2.7.12/bin/python", required = T)
+# check on python config and make sure it's using the correct verison
+reticulate::py_config()
 # Set working directory
 setwd(glue::glue("{dirname(rstudioapi::getActiveDocumentContext()$path)}/.."))
 

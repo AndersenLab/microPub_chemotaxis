@@ -18,7 +18,15 @@ import pickle
 from skimage.measure import regionprops
 from matplotlib import colors
 
+# tim additions
+#add here
 
+#########################################################
+# define ci function to use below
+def ci(v):
+    return ((v[0] + v[3]) - (v[1] + v[2])) / float(v[6]) # takes input (v) from ret = [tl, tr, bl, br, n, total_q, total]
+
+###########################################################
 # define find plate funciton
 def find_plate(img, radii_range):
     # Read image, and convert to floating point
@@ -49,11 +57,12 @@ def find_plate(img, radii_range):
 # set parameters radii_range
 radii_range = 900, 940
 img = "/Users/tim/repos/microPub_chemotaxis/data/20180321_crop/1_A_0001.jpg"
-test = find_plate(radii_range=radii_range, img="/Users/tim/repos/microPub_chemotaxis/data/20180321_crop/1_A_0001.jpg")
-
+small = 100
+large = 1200
+#find_plate(radii_range=radii_range, img="/Users/tim/repos/microPub_chemotaxis/data/20180321_crop/1_A_0001.jpg")
 
 # define the crop and filter function. The small and large objects are hard coded.
-def crop_and_filter_plate(img, radii_range, extra_crop, small = 100, large = 1200, debug= False):
+def crop_and_filter_plate(img, radii_range, extra_crop, small = 100, large = 1200, debug=True):
     # get file name
     fname = os.path.splitext(os.path.basename(img))[0]
     # find the center and radius of the plate in the image using find_plate function
@@ -73,7 +82,7 @@ def crop_and_filter_plate(img, radii_range, extra_crop, small = 100, large = 120
     l_crop = int(x - radius)
     r_crop = int(x + radius)
     img = img[t_crop:b_crop]
-    img = img[:,l_crop:r_crop] # finalize the image cropping by defining pixel extent for img
+    img = img[:,l_crop:r_crop] # finalize the image cropping by defining pixel extent for img as circle radius
 
     if debug:
         with indent(4):
@@ -81,12 +90,13 @@ def crop_and_filter_plate(img, radii_range, extra_crop, small = 100, large = 120
         plt.imsave("/Users/tim/repos/microPub_chemotaxis/data/temp/debug/" + fname + ".05_crop.png", img) # save the cropped image
 
     # Redefine x,y,radius; Generate circle mask.
-    mask = np.zeros(img.shape, dtype=np.uint8) # make an empty array that fits image pixel dimesnions
+    mask = np.zeros(img.shape, dtype=np.uint8) # make an array of zeros that fits cropped image pixel dimesnions
     x, y, radius = [img.shape[0]/2] * 3 # set x, y, and radius to 1/2 img dimension in pixels. x, y is the origin of the circle mask with radius. 
     
     # apply the circle mask to image
-    rr, cc = circle(y, x, radius) # set pixel coords of circle for mask
+    rr, cc = circle(y, x, radius-(0.025*radius)) # set pixel coords of circle for mask TIM added a 2.5% ruduction in radius to remove more of edge
     mask[rr, cc] = 1 # fill mask array with 1s where the plate is
+    # set non-1 pixels in img to false?
     img[mask == 0] = False
 
     if debug:
@@ -97,8 +107,8 @@ def crop_and_filter_plate(img, radii_range, extra_crop, small = 100, large = 120
     # Apply a canny filter
     img = canny(img, sigma=1.5, mask = mask == 1, low_threshold = 0.20, high_threshold = 0.30) # find the edges of objects within the plate
 
-    # Remove the edge
-    mask = np.zeros(img.shape, dtype=np.uint8) # make an array of zeros the size of the 
+    # Set mask  on canny edge detection img
+    mask = np.zeros(img.shape, dtype=np.uint8) # make an array of zeros the size of the img
     rr, cc = circle(y, x, radius-20) # the circle radius was set to radius-3. THIS "-3" COULD BE USED TO REMOVE MORE OF THE OUTSIDE OF THE PLATE!!!! 3 is very low.
     mask[rr, cc] = 1
     img[mask == 0] = False
@@ -125,74 +135,85 @@ def crop_and_filter_plate(img, radii_range, extra_crop, small = 100, large = 120
         plt.imsave("/Users/tim/repos/microPub_chemotaxis/data/temp/debug/" + fname + ".09_fill.png", img, cmap='copper')
 
     # Remove small particles
-    label_objects, nb_labels = ndi.label(img)
-    sizes = np.bincount(label_objects.ravel())
+    label_objects, nb_labels = ndi.label(img) # create labels for continous objects identified in img binary (ideally worms)
+    sizes = np.bincount(label_objects.ravel()) # count the number of pixels in each bin and return an array with a size for each including the background
 
     # Label by mask
-    reg_props = regionprops(label_objects)
-    axis_length = np.array([x.minor_axis_length for x in reg_props])
-    ecc = np.array([x.eccentricity for x in reg_props])
-    solidity = np.array([x.solidity for x in reg_props])
-    filters = np.zeros(len(reg_props)+1, dtype='int32')
-    filters[filters == 0] = 4
-    filters[sizes < small*5] = 5
-    filters[sizes < small] = 1
-    filters[sizes > large] = 2
-    filters[0] = 0
+    reg_props = regionprops(label_objects) # describe regions for all objects see help(regionprops) for details on the properties. Note: background ignored b/c value = 0
+    axis_length = np.array([x.minor_axis_length for x in reg_props]) # grab minor axis length
+    ecc = np.array([x.eccentricity for x in reg_props]) # grab eccentricity
+    solidity = np.array([x.solidity for x in reg_props]) # solidarity
+    filters = np.zeros(len(reg_props)+1, dtype='int32') # setup a filter array with 0s with length eaual to reg_groups+1
+    filters[filters == 0] = 4 # set all to 4
+    filters[sizes < small*5] = 5 # set sizes that are less than 5X small pixel count to 5, this is a worm or worm clump: NEED TO TEST AND MEANS OUR RESOLTION IS HARDCODED!
+    filters[sizes < small] = 1 # set small objects to 1, this is debris
+    filters[sizes > large] = 2 # set large objects to 2, this is a larger object than expected.
+    filters[0] = 0 # set the backround to 0, i.e., the first number in array (filters[0]).
 
     if debug:
         if not os.path.exists("debug/" + fname + "/"):
             os.makedirs("debug/" + fname + "/")
         for reg in reg_props:
-            plt.imsave("debug/" + fname + "/" + str(reg.label) + ".png", reg.image, cmap='copper')
+            plt.imsave("debug/" + fname + "/" + str(reg.label) + ".png", reg.image, cmap='copper') # save each object and name with object label
 
     filter_img = label_objects.copy()
     for k,v in enumerate(filters):
         filter_img[filter_img == k] = v
 
     if debug:
-        plt.imsave("debug/" + fname + ".10_filters.png", filter_img, cmap='copper')
+        plt.imsave("/Users/tim/repos/microPub_chemotaxis/data/temp/debug/" + fname + ".10_filters.png", filter_img, cmap='copper')
 
-    filters[filters < 4] = 0
-    filters[0] = 0
-    img = filters[label_objects]
-
+    filters[filters < 4] = 0 # set small (1), large (2), background (0) to zero in filters
+    filters[0] = 0 # force background to 0
+    img = filters[label_objects] # insert filter values to label_objects and assign to img
     # Rescale and weight
-    img[img == 4] = 1
-    img[img == 5] = 1
+    img[img == 4] = 1 # assign clumps (4) the same value as worms 1
+    img[img == 5] = 1 # assing worms (5) to 1
 
     if debug:
-        plt.imsave("debug/" + fname + ".11_filtered.png", img, cmap='copper')
+        plt.imsave("/Users/tim/repos/microPub_chemotaxis/data/temp/debug/" + fname + ".11_filtered.png", img, cmap='copper')
 
-    return img
+    return img # return the result
 
-
-
+# set variables for annotation
+img = img
+n_radius_divisor = 5
+img_raw = "/Users/tim/repos/microPub_chemotaxis/data/20180321_crop/1_A_0001.jpg"
 
 ###################################################
 def pixel_counts(img, n_radius_divisor):
-    r = img.shape[0]/2
+    r = img.shape[0]/2 # set a radius
 
-    mask = np.zeros(img.shape, dtype=np.uint8)
-    x, y, radius = [img.shape[0]/2] * 3
-    radius = radius / n_radius_divisor
+    mask = np.zeros(img.shape, dtype=np.uint8) # make an empty array of zeros matching img shape
+    x, y, radius = [img.shape[0]/2] * 3 # assign x, y, and radius to same value
+    radius = radius / n_radius_divisor # divide radius by divisor THE DEFAULT IS SET TO 5
     rr, cc = circle(y, x, radius)
     mask[rr, cc] = 1
 
     n, q = img.copy(), img.copy()
     q[mask == 1] = 0
     n[mask == 0] = 0
-    tl = sum(q[0:r,0:r].flatten())
-    tr = sum(q[0:r,r:].flatten())
+    tl = sum(q[0:r,0:r].flatten()) # add all 1s in quadrant 1 after masked origin in the center is set to 0
+    tr = sum(q[0:r,r:].flatten()) # same for other quads
     bl = sum(q[r:,0:r].flatten())
     br = sum(q[r:,r:].flatten())
-    plt.imsave("debug/q1.png", q[0:r,0:r], cmap = 'copper')
-    plt.imsave("debug/q2.png", q[0:r,r:], cmap = 'copper')
-    plt.imsave("debug/q3.png", q[r:,0:r], cmap = 'copper')
-    plt.imsave("debug/q4.png", q[r:,r:], cmap = 'copper')
-    n = sum(n.flatten())
-    total_q = sum(q.flatten())
-    total = sum(img.flatten())
+    plt.imsave("/Users/tim/repos/microPub_chemotaxis/data/temp/debug/q1.png", q[0:r,0:r], cmap = 'copper') # save quadrant
+        # debug start
+        img_raw = "/Users/tim/repos/microPub_chemotaxis/data/20180321_crop/1_A_0001.jpg"
+        img_raw = imread(img_raw, flatten = True) # load the image
+        img_raw2 = img_raw[t_crop:b_crop]
+        img_raw3 = img_raw2[:,l_crop:r_crop]
+        img_raw4 = img_raw3[mask == 1] = 0
+        plt.imsave("/Users/tim/repos/microPub_chemotaxis/data/temp/debug/test_mask_on_raw.png", img_raw3) # ah, the inner circle can be plotted like this but we need coords from find_plate()
+        # end debug
+    plt.imsave("/Users/tim/repos/microPub_chemotaxis/data/temp/debug/q2.png", q[0:r,r:], cmap = 'copper')
+    plt.imsave("/Users/tim/repos/microPub_chemotaxis/data/temp/debug/q3.png", q[r:,0:r], cmap = 'copper')
+    plt.imsave("/Users/tim/repos/microPub_chemotaxis/data/temp/debug/q4.png", q[r:,r:], cmap = 'copper')
+    n = sum(n.flatten()) # calc total from n VERY STRANGE I THOUGHT THIS WOULD ONLY COUNT ORIGIN B/C n[mask == 0] = 0. 
+    total_q = sum(q.flatten()) # total in 
+    total = sum(img.flatten()) # ok this is across entire image from the find_plate function
     ret = [tl, tr, bl, br, n, total_q, total]
-    ci_val = ci(ret)
+    ci_val = ci(ret) # get ci function from above
     return ret + [ci_val]
+
+return ((v[0] + v[3]) - (v[1] + v[2])) / float(v[6])
