@@ -27,13 +27,17 @@ def ci(v):
     return ((v[0] + v[3]) - (v[1] + v[2])) / float(v[6]) # takes input (v) from ret = [tl, tr, bl, br, n, total_q, total]
 
 ###########################################################
+
+img = "/Users/tim/repos/microPub_chemotaxis/data/20180321_crop/1_A_0001.jpg"
+radii_range = 900, 940
+fp_sigma = 1
 # define find plate funciton
-def find_plate(img, radii_range):
+def find_plate(img, radii_range, fp_sigma):
     # Read image, and convert to floating point
     img = img_as_bool(imread(img, mode="F", flatten=True))
 
     # Detect edges
-    edges = canny(img, sigma=1)
+    edges = canny(img, sigma=fp_sigma)
 
     # Find circles
     hough_radii = np.arange(radii_range[0], radii_range[1], 2)
@@ -59,14 +63,16 @@ radii_range = 900, 940
 img = "/Users/tim/repos/microPub_chemotaxis/data/20180321_crop/1_A_0001.jpg"
 small = 100
 large = 1200
-#find_plate(radii_range=radii_range, img="/Users/tim/repos/microPub_chemotaxis/data/20180321_crop/1_A_0001.jpg")
+fp_sigma = 1
+extra_crop = 20
+#find_plate(radii_range=radii_range, img="/Users/tim/repos/microPub_chemotaxis/data/20180321_crop/1_A_0001.jpg", fp_sigma = 0.5)
 
 # define the crop and filter function. The small and large objects are hard coded.
 def crop_and_filter_plate(img, radii_range, extra_crop, small = 100, large = 1200, debug=True):
     # get file name
     fname = os.path.splitext(os.path.basename(img))[0]
     # find the center and radius of the plate in the image using find_plate function
-    center, radius = find_plate(img, radii_range)
+    center, radius = find_plate(img, radii_range, fp_sigma)
     if debug:
         with indent(4):
             puts_err(colored.blue("Center: " + str(center[0]) + "," + str(center[1])))
@@ -94,10 +100,9 @@ def crop_and_filter_plate(img, radii_range, extra_crop, small = 100, large = 120
     x, y, radius = [img.shape[0]/2] * 3 # set x, y, and radius to 1/2 img dimension in pixels. x, y is the origin of the circle mask with radius. 
     
     # apply the circle mask to image
-    rr, cc = circle(y, x, radius-(0.025*radius)) # set pixel coords of circle for mask TIM added a 2.5% ruduction in radius to remove more of edge
+    rr, cc = circle(y, x, radius-extra_crop) # set pixel coords of circle for mask and crop the radius with extra-crop value
     mask[rr, cc] = 1 # fill mask array with 1s where the plate is
-    # set non-1 pixels in img to false?
-    img[mask == 0] = False
+    img[mask == 0] = False # set non-1 pixels in img to false
 
     if debug:
         with indent(4):
@@ -109,7 +114,7 @@ def crop_and_filter_plate(img, radii_range, extra_crop, small = 100, large = 120
 
     # Set mask  on canny edge detection img
     mask = np.zeros(img.shape, dtype=np.uint8) # make an array of zeros the size of the img
-    rr, cc = circle(y, x, radius-20) # the circle radius was set to radius-3. THIS "-3" COULD BE USED TO REMOVE MORE OF THE OUTSIDE OF THE PLATE!!!! 3 is very low.
+    rr, cc = circle(y, x, radius-extra_crop) # set pixel coords of circle for mask and crop the radius with extra-crop value
     mask[rr, cc] = 1
     img[mask == 0] = False
 
@@ -147,7 +152,7 @@ def crop_and_filter_plate(img, radii_range, extra_crop, small = 100, large = 120
     filters[filters == 0] = 4 # set all to 4
     filters[sizes < small*5] = 5 # set sizes that are less than 5X small pixel count to 5, this is a worm or worm clump: NEED TO TEST AND MEANS OUR RESOLTION IS HARDCODED!
     filters[sizes < small] = 1 # set small objects to 1, this is debris
-    filters[sizes > large] = 2 # set large objects to 2, this is a larger object than expected.
+    filters[sizes > large] = 2 # set large objects to 2, this is a larger object than expected even accounting for worm clumps.
     filters[0] = 0 # set the backround to 0, i.e., the first number in array (filters[0]).
 
     if debug:
@@ -167,8 +172,8 @@ def crop_and_filter_plate(img, radii_range, extra_crop, small = 100, large = 120
     filters[0] = 0 # force background to 0
     img = filters[label_objects] # insert filter values to label_objects and assign to img
     # Rescale and weight
-    img[img == 4] = 1 # assign clumps (4) the same value as worms 1
-    img[img == 5] = 1 # assing worms (5) to 1
+    img[img == 4] = 1 # assign large worm clumps (4) the same value as worms 1
+    img[img == 5] = 1 # assign worms or worm clumps (5) to 1
 
     if debug:
         plt.imsave("/Users/tim/repos/microPub_chemotaxis/data/temp/debug/" + fname + ".11_filtered.png", img, cmap='copper')
@@ -178,6 +183,7 @@ def crop_and_filter_plate(img, radii_range, extra_crop, small = 100, large = 120
 # set variables for annotation
 img = img
 n_radius_divisor = 5
+extra_crop = 20
 img_raw = "/Users/tim/repos/microPub_chemotaxis/data/20180321_crop/1_A_0001.jpg"
 
 ###################################################
