@@ -195,3 +195,73 @@ map <- ggplot2::ggplot() +
 
 # save the map
 cowplot::ggsave2(map, filename = "plots/map.pdf", width = 4.6, height = 3.625)
+
+#=====================================================#
+# Update E to per strain lm fit
+#=====================================================#
+# strain effect plot
+ggplot(df_corr) +
+  aes(x = man_ci, y = auto_ci, group = strain, color = strain) +
+  geom_smooth(method="lm", size = 0.5, ) +
+  ggpubr::stat_regline_equation(aes(label = ..eq.label..)) +
+  xlim(-1,1) +
+  ylim(-1,1) +
+  ggplot2::geom_abline(intercept = 0, slope = 1, linetype = 2) +
+  ggplot2::labs(title = "", color = "strain", x = "Manual (CI)", y = "Automated (CI)") +
+  ggplot2::theme_bw() +
+  ggplot2::theme(legend.position= c(0.8, 0.2),
+                 panel.grid.major = element_blank(),
+                 panel.grid.minor = element_blank())
+
+# add slope and intercept estimates from each assay aross both compounds
+df_E <- df_corr %>%
+  dplyr::group_by(Assay, strain) %>%
+  dplyr::mutate(intercept = lm(auto_ci ~ man_ci)[[1]][1],
+                slope = lm(auto_ci ~ man_ci)[[1]][2],
+                n = n()) %>%
+  dplyr::group_by(strain) %>%
+  dplyr::mutate(mean_int = mean(intercept),
+                mean_slope = mean(slope),
+                max_int = max(intercept),
+                min_int = min(intercept),
+                max_slope = max(slope),
+                min_slope = min(slope)) %>%
+  dplyr::ungroup()
+
+# plot box plot for each strain
+int_plot <- ggplot2::ggplot(df_E %>% dplyr::distinct(strain, .keep_all = T)) +
+  ggplot2::aes(x = as.factor(strain), y = mean_int) +
+  #ggplot2::geom_point(shape = 1) +
+  ggplot2::geom_pointrange(aes(ymin=min_int, ymax=max_int)) +
+  ggplot2::geom_abline(intercept = 0, slope = 0, linetype = 2) +
+  ggplot2::labs(title = "", color = "strain", x = "", y = "intercept") +
+  ggplot2::theme_bw() +
+  ggplot2::theme(legend.position= "none",
+                 axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1),
+                 panel.grid.major = element_blank(),
+                 panel.grid.minor = element_blank())
+
+slope_plot <- ggplot2::ggplot(df_E %>% dplyr::distinct(strain, .keep_all = T)) +
+  ggplot2::aes(x = as.factor(strain), y = mean_slope) +
+  #ggplot2::geom_point(shape = 1) +
+  ggplot2::geom_pointrange(aes(ymin=min_slope, ymax=max_slope)) +
+  ggplot2::geom_abline(intercept = 1, slope = 0, linetype = 2) +
+  ggplot2::labs(title = "", color = "strain", x = "", y = "slope") +
+  ggplot2::theme_bw() +
+  ggplot2::theme(legend.position= "none",
+                 axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1),
+                 panel.grid.major = element_blank(),
+                 panel.grid.minor = element_blank())
+  
+E2 <- cowplot::plot_grid(int_plot, slope_plot, ncol = 1, align = "vh")
+E2  
+
+cowplot::ggsave2(E2, filename = "plots/model_coef_plot.pdf", width = 3.6, height = 4.8)
+
+# test for an effect of strain on lm parameters
+e2m_int <- lm(data = df_E %>% dplyr::distinct(Assay, strain, .keep_all = T), formula = intercept ~ strain)
+anova(e2m_int)
+
+e2m_slope <- lm(data = df_E %>% dplyr::distinct(Assay, strain, .keep_all = T), formula = slope ~ strain)
+anova(e2m_slope)
+
