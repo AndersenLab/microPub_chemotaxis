@@ -1,6 +1,3 @@
-#========================================================#
-# corr plot
-#========================================================#
 library(tidyverse)
 
 # Set working directory
@@ -264,4 +261,8 @@ anova(e2m_int)
 
 e2m_slope <- lm(data = df_E %>% dplyr::distinct(Assay, strain, .keep_all = T), formula = slope ~ strain)
 anova(e2m_slope)
+
+# test power from our data - https://aaroncaldwell.us/SuperpowerBook/index.html#preface
+
+
 
