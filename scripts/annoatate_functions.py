@@ -18,14 +18,10 @@ import pickle
 from skimage.measure import regionprops
 from matplotlib import colors
 
-# tim additions
-#add here
-
 #########################################################
 # define ci function to use below
 def ci(v):
     return ((v[0] + v[3]) - (v[1] + v[2])) / float(v[6]) # takes input (v) from ret = [tl, tr, bl, br, n, total_q, total]
-
 ###########################################################
 
 img = "/Users/tim/repos/microPub_chemotaxis/data/20180321_crop/1_A_0001.jpg"
@@ -215,11 +211,11 @@ def pixel_counts(img, n_radius_divisor):
     plt.imsave("/Users/tim/repos/microPub_chemotaxis/data/temp/debug/q2.png", q[0:r,r:], cmap = 'copper')
     plt.imsave("/Users/tim/repos/microPub_chemotaxis/data/temp/debug/q3.png", q[r:,0:r], cmap = 'copper')
     plt.imsave("/Users/tim/repos/microPub_chemotaxis/data/temp/debug/q4.png", q[r:,r:], cmap = 'copper')
-    n = sum(n.flatten()) # calc total from n VERY STRANGE I THOUGHT THIS WOULD ONLY COUNT ORIGIN B/C n[mask == 0] = 0. 
-    total_q = sum(q.flatten()) # total in 
-    total = sum(img.flatten()) # ok this is across entire image from the find_plate function
+    n = sum(n.flatten()) # n is the pixelcount for the origin. 
+    total_q = sum(q.flatten()) # total pixel count in quadrants not the origin
+    total = sum(img.flatten()) # total pixel count across entire plate
     ret = [tl, tr, bl, br, n, total_q, total]
-    ci_val = ci(ret) # get ci function from above
+    ci_val = ci(ret) # use ci function from above to calculate chemotaxis index
     return ret + [ci_val]
 
 return ((v[0] + v[3]) - (v[1] + v[2])) / float(v[6])
