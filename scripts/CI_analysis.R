@@ -263,6 +263,7 @@ e2m_slope <- lm(data = df_E %>% dplyr::distinct(Assay, strain, .keep_all = T), f
 anova(e2m_slope)
 
 # test power from our data - https://aaroncaldwell.us/SuperpowerBook/index.html#preface
-
+test <- lm(data = df_E, formula = auto_ci ~ man_ci + strain + as.character(Assay))
+anova(test)
 
 
