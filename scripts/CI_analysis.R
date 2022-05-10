@@ -80,7 +80,6 @@ cowplot::ggsave2(corr, filename = 'plots/assay_agreement_CI_updated_ct.png', wid
 #==================================================#
 # UPDATE CORR FOR EACH TYPE
 #==================================================#
-
 corr_v2 <- ggplot() +
   geom_point(data = df_corr %>% dplyr::filter( drug == "1-octanol"), aes(x = man_ci, y = auto_ci, fill = as.factor(drug)), shape = 21) +
   geom_smooth(data = df_corr %>% dplyr::filter(drug == "1-octanol"), aes(x = man_ci, y = auto_ci), method="lm", color = "#F8766D", size = 0.5) +
@@ -262,8 +261,43 @@ anova(e2m_int)
 e2m_slope <- lm(data = df_E %>% dplyr::distinct(Assay, strain, .keep_all = T), formula = slope ~ strain)
 anova(e2m_slope)
 
-# test power from our data - https://aaroncaldwell.us/SuperpowerBook/index.html#preface
-test <- lm(data = df_E, formula = auto_ci ~ man_ci + strain + as.character(Assay))
-anova(test)
+#=====================================================#
+# Strain effect on method agreement
+#=====================================================#
+# lets do a regression analysis to look at the effect of strain with N2 as reference
+df_SE <- df_E %>%
+  dplyr::mutate(strain = factor(strain, levels = c("N2", "CB4856", "CX11314", "DL238", "EG4725",
+                                                   "JT11398", "JU258", "JU775", "LKC34",
+                                                   "MY16", "MY23")))
+strain_effect <- lm(data = df_SE, formula = auto_ci ~ man_ci + strain + as.character(Assay))
+strain_effect_oct <- lm(data = df_SE %>% dplyr::filter(drug == "1-octanol"), formula = auto_ci ~ man_ci + strain + as.character(Assay))
+strain_effect_iso <- lm(data = df_SE %>% dplyr::filter(drug == "isoamly alcohol"), formula = auto_ci ~ man_ci + strain + as.character(Assay))
 
+# model summaries
+summary(strain_effect)
+summary(strain_effect_oct)
+summary(strain_effect_iso)
 
+# a single model for estimating the strain effect on slope and intercept - https://stats.stackexchange.com/questions/188061/testing-slope-significance-for-multiple-factor-levels-in-a-linear-model
+# Should I use a linear mixed effects model? http://bbolker.github.io/mixedmodels-misc/glmmFAQ.html
+# I have a similar analysis to lme4 paper example
+fm1 <- lme4::lmer(auto_ci ~ man_ci + (man_ci || strain), data = df_SE)
+
+# Use help("pvalues") to see how to calculate p-values for al effects in a model - try car::Anova and lmerTest::anova provide wrappers for Kenward-Roger-corrected tests using pbkrtest: lmerTest::anova also provides t tests via the Satterthwaite approximation (P,*)
+# could also try the model comparison test
+fm1 <- lme4::lmer(auto_ci ~ man_ci + (1 | Assay), data = df_SE)
+fm2 <- lme4::lmer(auto_ci ~ man_ci + (1 | Assay) + (1 | strain), data = df_SE)
+#fm3 <- lme4::lmer(auto_ci ~ man_ci + (1 | Assay) + (man_ci | strain), data = df_SE)
+fm4 <- lme4::lmer(auto_ci ~ man_ci + (1 | Assay) + (man_ci || strain), data = df_SE)
+
+# try anova approach with lmerTest package - can compare reduced models to test significance of terms
+lmerTest::ranova(fm4, reduce.terms = F)
+
+fm5 <- lme4::lmer(auto_ci ~ man_ci + (1 | strain), data = df_SE)
+fm6 <- lme4::lmer(auto_ci ~ man_ci + (man_ci || strain), data = df_SE)
+anova(fm5, fm6)
+
+# try to get p-values with 
+# ploting the results from full model with lmerTest - https://cran.r-project.org/web/packages/lmerTest/lmerTest.pdf
+test <- lmerTest::lmer(auto_ci ~ man_ci + (1 | Assay) + (man_ci || strain), data = df_SE)
+anova(test, ddf="Kenward-Roger")
