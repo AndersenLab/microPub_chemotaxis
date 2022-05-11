@@ -268,15 +268,77 @@ anova(e2m_slope)
 df_SE <- df_E %>%
   dplyr::mutate(strain = factor(strain, levels = c("N2", "CB4856", "CX11314", "DL238", "EG4725",
                                                    "JT11398", "JU258", "JU775", "LKC34",
-                                                   "MY16", "MY23")))
-strain_effect <- lm(data = df_SE, formula = auto_ci ~ man_ci + strain + as.character(Assay))
-strain_effect_oct <- lm(data = df_SE %>% dplyr::filter(drug == "1-octanol"), formula = auto_ci ~ man_ci + strain + as.character(Assay))
-strain_effect_iso <- lm(data = df_SE %>% dplyr::filter(drug == "isoamly alcohol"), formula = auto_ci ~ man_ci + strain + as.character(Assay))
+                                                   "MY16", "MY23")),
+                Assay = as.character(Assay))
+strain_effect <- lm(data = df_SE, formula = auto_ci ~ man_ci)
+strain_effect2 <- lm(data = df_SE, formula = auto_ci ~ man_ci + strain)
+strain_effect3 <- lm(data = df_SE, formula = auto_ci ~ man_ci + Assay)
+strain_effect4 <- lm(data = df_SE, formula = auto_ci ~ man_ci + strain + Assay)
+strain_effect5 <- lm(data = df_SE, formula = auto_ci ~ man_ci * strain)
+strain_effect6 <- lm(data = df_SE, formula = auto_ci ~ strain * man_ci + Assay)
+# model comparison
 
-# model summaries
+anova(strain_effect, strain_effect2)
+anova(strain_effect, strain_effect3)
+anova(strain_effect, strain_effect4)
+anova(strain_effect, strain_effect5)
+anova(strain_effect5, strain_effect)
+stats::AIC(strain_effect, strain_effect5)
+# anova tabel for the strain effects on slope and intercept - no effect
+anova(strain_effect5)
+# pull out coefficients to plot
+summary(strain_effect_oct4)
+
+
+
+# look at 1-octanol only
+strain_effect_oct <- lm(data = df_SE %>% dplyr::filter(drug == "1-octanol"), formula = auto_ci ~ man_ci + strain)
+strain_effect_oct2 <- lm(data = df_SE %>% dplyr::filter(drug == "1-octanol"), formula = auto_ci ~ man_ci + strain + Assay)
+strain_effect_oct3 <- lm(data = df_SE %>% dplyr::filter(drug == "1-octanol"), formula = auto_ci ~ man_ci * strain)
+strain_effect_oct4 <- lm(data = df_SE %>% dplyr::filter(drug == "1-octanol"), formula = auto_ci ~ man_ci * strain + Assay)
+strain_effect_oct5 <- lm(data = df_SE %>% dplyr::filter(drug == "1-octanol"), formula = auto_ci ~ man_ci)
+# model comparison for iso against base model - model with strain is never better
+anova(strain_effect_oct5, strain_effect_oct)
+anova(strain_effect_oct, strain_effect_oct2)
+anova(strain_effect_oct2, strain_effect_oct3)
+anova(strain_effect_oct2, strain_effect_oct4)
+# anova tabel for the strain effects on slope and intercept - no effect
+anova(strain_effect_oct4)
+# pull out coefficients to plot
+summary(strain_effect_oct4)
+
+
+# look at isoamyl
+strain_effect_iso <- lm(data = df_SE %>% dplyr::filter(drug == "isoamly alcohol"), formula = auto_ci ~ man_ci + strain)
+strain_effect_iso2 <- lm(data = df_SE %>% dplyr::filter(drug == "isoamly alcohol"), formula = auto_ci ~ man_ci + strain + Assay)
+strain_effect_iso3 <- lm(data = df_SE %>% dplyr::filter(drug == "isoamly alcohol"), formula = auto_ci ~ man_ci * strain)
+strain_effect_iso4 <- lm(data = df_SE %>% dplyr::filter(drug == "isoamly alcohol"), formula = auto_ci ~ man_ci * strain + Assay)
+strain_effect_iso5 <- lm(data = df_SE %>% dplyr::filter(drug == "isoamly alcohol"), formula = auto_ci ~ man_ci)
+# model comparison for iso against base model - model with strain is never better
+anova(strain_effect_iso5, strain_effect_iso)
+anova(strain_effect_iso5, strain_effect_iso2)
+anova(strain_effect_iso5, strain_effect_iso3)
+anova(strain_effect_iso5, strain_effect_iso4)
+# anova tabel for the strain effects on slope and intercept - no effect
+anova(strain_effect_iso3)
+# pull out coefficients to plot
+summary(strain_effect_iso3)
+
+
 summary(strain_effect)
+anova(strain_effect)
+summary(strain_effect)
+anova(strain_effect2)
+
+
+stats::AIC(strain_effect_iso, )
 summary(strain_effect_oct)
+summary(strain_effect_oct2)
 summary(strain_effect_iso)
+summary(strain_effect_iso2)
+anova(strain_effect_oct2)
+anova(strain_effect_iso2)
+
 
 # a single model for estimating the strain effect on slope and intercept - https://stats.stackexchange.com/questions/188061/testing-slope-significance-for-multiple-factor-levels-in-a-linear-model
 # Should I use a linear mixed effects model? http://bbolker.github.io/mixedmodels-misc/glmmFAQ.html
@@ -288,7 +350,16 @@ fm1 <- lme4::lmer(auto_ci ~ man_ci + (man_ci || strain), data = df_SE)
 fm1 <- lme4::lmer(auto_ci ~ man_ci + (1 | Assay), data = df_SE)
 fm2 <- lme4::lmer(auto_ci ~ man_ci + (1 | Assay) + (1 | strain), data = df_SE)
 #fm3 <- lme4::lmer(auto_ci ~ man_ci + (1 | Assay) + (man_ci | strain), data = df_SE)
-fm4 <- lme4::lmer(auto_ci ~ man_ci + (1 | Assay) + (man_ci || strain), data = df_SE)
+fm4 <- lme4::lmer(auto_ci ~ man_ci + (1 | as.character(Assay)) + (man_ci || strain), data = df_SE)
+fm7 <- lme4::lmer(auto_ci ~ man_ci + (man_ci || strain), data = df_SE)
+fm7_alt <- afex::lmer_alt(auto_ci ~ man_ci + (man_ci || strain), data = df_SE, set_data_arg = T)
+summary(fm7_alt)
+fm8 <- lme4::lmer(auto_ci ~ man_ci + (man_ci | strain), data = df_SE)
+summary(fm4)
+summary(fm7)
+confint(fm7)
+summary(fm8)
+lattice::qqmath(fm1, id = 0.05)
 
 # try anova approach with lmerTest package - can compare reduced models to test significance of terms
 lmerTest::ranova(fm4, reduce.terms = F)
