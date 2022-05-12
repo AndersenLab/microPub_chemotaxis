@@ -188,6 +188,7 @@ map <- ggplot2::ggplot() +
     colour = "grey8",
     segment.colour = "grey8",
     size = 2.5, label.padding = 0.1, stroke = 0.15)
+map
 
 # save the map
 cowplot::ggsave2(map, filename = "plots/map.pdf", width = 4.6, height = 3.625)
@@ -276,6 +277,7 @@ strain_effect3 <- lm(data = df_SE, formula = auto_ci ~ man_ci + Assay)
 strain_effect4 <- lm(data = df_SE, formula = auto_ci ~ man_ci + strain + Assay)
 strain_effect5 <- lm(data = df_SE, formula = auto_ci ~ man_ci * strain)
 strain_effect6 <- lm(data = df_SE, formula = auto_ci ~ strain * man_ci + Assay)
+strain_effect7 <- lm(data = df_SE, formula = auto_ci ~ strain + man_ci + drug)
 # model comparison
 
 anova(strain_effect, strain_effect2)
@@ -283,14 +285,63 @@ anova(strain_effect, strain_effect3)
 anova(strain_effect, strain_effect4)
 anova(strain_effect, strain_effect5)
 anova(strain_effect5, strain_effect)
-stats::AIC(strain_effect, strain_effect5)
+anova(strain_effect2, strain_effect5)
+stats::AIC(strain_effect, strain_effect2, strain_effect3, strain_effect4, strain_effect5, strain_effect6, strain_effect7) # strain_effect2 is best model b/c model7 <= 2 AIC units greater than model2
 # anova tabel for the strain effects on slope and intercept - no effect
-anova(strain_effect5)
+anova(strain_effect2)
+car::Anova(strain_effect2)
 # pull out coefficients to plot
-summary(strain_effect_oct4)
+summary(strain_effect2)
+#========================================#
+# Exploring other models fit to each drug
+#========================================#
+n2_int <- stats::coef(strain_effect2)[[1]]
+p_se_df <- as.data.frame(stats::confint(strain_effect2)) %>%
+  tibble::rownames_to_column("name") %>%
+  dplyr::mutate(strain = case_when(name == "(Intercept)" ~ "N2",
+                                   name != "(Intercept)" ~ stringr::str_replace(name, pattern = "strain", replacement = ""))) %>%
+  dplyr::mutate(estimate = stats::coef(strain_effect2),
+                l = -1 * (estimate - `2.5 %`),
+                u = `97.5 %` - estimate,
+                norm_est = n2_int - estimate,
+                norm_l = norm_est + l,
+                norm_u = norm_est + u,
+                est = ifelse(strain == "N2", norm_est, estimate),
+                l = ifelse(strain == "N2", norm_l, `2.5 %`),
+                u = ifelse(strain == "N2", norm_u, `97.5 %`)) %>%
+  dplyr::select(strain, est, l, u) %>%
+  dplyr::filter(strain != "man_ci") %>%
+  dplyr::arrange(est)
 
+# ploting 1
+order = p_se_df %>%
+  dplyr::pull(strain)
+order2 <- c("N2","JT11398","DL238","EG4725","JU775","CX11314","LKC34","JU258","MY16","CB4856","MY23")  
+p_se1 <- ggplot(p_se_df) + 
+    aes(y = factor(strain, levels = order2), x = est) +
+    ggplot2::geom_pointrange(aes(xmin=l, xmax=u)) +
+    ggplot2::geom_vline(xintercept = 0, linetype = 2) +
+    ggplot2::labs(title = "", color = "strain", y = "", x = "N2 normalized coefficient estimates") +
+    ggplot2::theme_bw() +
+    ggplot2::theme(legend.position= "none",
+                   #axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1),
+                   panel.grid.major = element_blank(),
+                   panel.grid.minor = element_blank())
+p_se1
 
+cowplot::ggsave2(p_se1, filename = "plots/N2_norm_regression_coefs.pdf", width = 3.75, height = 3.75)
+# plot standardized estimates if wanted
+starin_effect2.beta <- lm.beta::lm.beta(strain_effect2)
+summary(starin_effect2.beta)
+confint(starin_effect2.beta)
 
+# plot regressiion coefficients with ggcoef
+GGally::ggcoef(strain_effect2)
+# plot regression coeff with sjPlot
+sjPlot::plot_model(strain_effect2)
+#========================================#
+# Exploring other models fit to each drug
+#========================================#
 # look at 1-octanol only
 strain_effect_oct <- lm(data = df_SE %>% dplyr::filter(drug == "1-octanol"), formula = auto_ci ~ man_ci + strain)
 strain_effect_oct2 <- lm(data = df_SE %>% dplyr::filter(drug == "1-octanol"), formula = auto_ci ~ man_ci + strain + Assay)
@@ -303,7 +354,7 @@ anova(strain_effect_oct, strain_effect_oct2)
 anova(strain_effect_oct2, strain_effect_oct3)
 anova(strain_effect_oct2, strain_effect_oct4)
 # anova tabel for the strain effects on slope and intercept - no effect
-anova(strain_effect_oct4)
+anova(strain_effect_oct)
 # pull out coefficients to plot
 summary(strain_effect_oct4)
 
